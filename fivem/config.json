@@ -1,0 +1,21 @@
+{
+  "global": {
+    "serverName": null,
+    "language": "en"
+  },
+  "logger": {},
+  "monitor": {
+    "restarterSchedule": []
+  },
+  "webServer": {},
+  "discordBot": {
+    "enabled": false,
+    "token": null,
+    "announceChannel": null
+  },
+  "fxRunner": {
+    "cfgPath": "/home/container/txData/default/server.cfg",
+    "serverDataPath": "/home/container/txData/default/",
+    "autostart": true
+  }
+}
