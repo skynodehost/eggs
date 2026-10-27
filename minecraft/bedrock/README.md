@@ -1,7 +1,9 @@
 # Vanilla Bedrock (NetherNet)
 
 Skynode build of the parkervcp Vanilla Bedrock egg, patched for the NetherNet
-transport that Bedrock Dedicated Server 26.51+ requires.
+transport that Bedrock Dedicated Server 26.51+ requires. Nothing is added to
+the server volume: the install script and startup command are the stock ones,
+and all NetherNet settings are written by the panel's config-file parser.
 
 ## Why the stock egg stopped working
 
@@ -26,41 +28,43 @@ That produces two failures on Pterodactyl:
 
 ## What this egg changes
 
-- `transport` is managed by the panel (`TRANSPORT` variable, default
-  `nethernet`).
-- The install script writes `start.sh`, and the startup command runs it. On
-  every boot the wrapper rewrites `server-udp-ports` as
-  `<public ip>:<ports>:<ports>` using the primary allocation IP (`SERVER_IP`)
-  and either the `UDP_PORTS` variable or, when that is empty, the primary
-  allocation port. Duplicate `server-udp-ports` lines are collapsed to one
-  because the server accumulates them.
-- The wrapper logs the advertised addresses and warns when fewer UDP ports are
-  advertised than `max-players`.
+Two keys are added to the egg's `server.properties` find block, which Wings
+applies before every start:
+
+| Key | Value |
+|---|---|
+| `transport` | `{{server.build.env.TRANSPORT}}` (default `nethernet`) |
+| `server-udp-ports` | `{{server.build.default.ip}}:{{server.build.default.port}}:{{server.build.default.port}}` |
+
+The primary allocation is therefore used for both signaling (TCP) and gameplay
+(UDP), and the advertised address is the public allocation IP. Wings publishes
+every allocation on both protocols, so nothing needs opening on the node.
 
 ## Variables
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `TRANSPORT` | `nethernet` | Staff only. `raknet` is an emergency switch and does not work with current clients. |
-| `UDP_PORTS` | empty | Gameplay UDP ports or ranges, comma separated, e.g. `19140-19149`. Each must be an allocation assigned to the server. Empty means the primary allocation port only. |
-| `NETHERNET_PUBLIC_IP` | empty | Staff only. Overrides the advertised IP when the allocation IP is not public. |
 
 ## Port budget
 
 Mojang's server documentation says to reserve one UDP port per connected
-player. With the default (primary allocation only) that is one player at a
-time. For a server with `max-players=10`, assign ten additional allocations in a
-contiguous block and set `UDP_PORTS` to that range. Wings publishes every
-assigned allocation on both TCP and UDP, so nothing else needs opening on the
-node.
+player. This egg advertises only the primary allocation port. If testing shows
+that a second player cannot join while the first is connected, the fix is to
+advertise every allocation assigned to the server. That cannot be expressed in
+an egg alone: `{{server.build.default.*}}` only exposes the primary allocation.
+The clean path is a panel-side environment variable (for example
+`SERVER_UDP_PORTS`, built from the server's allocations in the panel's
+`pterodactyl.environment_variables` config) that the find block can then
+reference as `{{server.build.env.SERVER_UDP_PORTS}}`.
 
 ## Rolling out
 
 1. Import `egg-vanilla-bedrock.json` in the panel (Admin, Nests, Import Egg)
    or update the existing Vanilla Bedrock egg from it.
-2. Reinstall each Bedrock server once so `start.sh` is written. Worlds,
-   allowlist and permissions are preserved by the install script.
-3. Check the console for `[nethernet] Signaling: TCP ... Gameplay: UDP ...` and
-   confirm the IP shown is the node's public address.
-4. Test a join from a 26.60 client. If only the first player can join, assign
-   more allocations and set `UDP_PORTS`.
+2. Restart each Bedrock server. No reinstall is needed; Wings rewrites
+   `server.properties` on start. Servers that still have `./start.sh` as their
+   startup command must be set back to `./bedrock_server` first.
+3. Confirm `server.properties` shows `transport=nethernet` and a
+   `server-udp-ports` line that starts with the node's public IP.
+4. Test a join from a 26.60 client.
